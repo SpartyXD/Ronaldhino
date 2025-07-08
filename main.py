@@ -102,17 +102,17 @@ class Robot:
         #PIDs
         #TODO: Calibrar los PID cercanos y lejanos xd
         self.farAnglePid = sp.PID(Kp=2, Ki=0, Kd=0, setpoint=0)
-        self.farPosPid = sp.PID(Kp=10, Ki=0, Kd=5, setpoint=0)
+        self.farPosPid = sp.PID(Kp=2, Ki=0, Kd=1, setpoint=0)
 
         self.closeAnglePid = sp.PID(Kp=2, Ki=0, Kd=0, setpoint=0)
-        self.closePosPid = sp.PID(Kp=10, Ki=0, Kd=5, setpoint=0)
+        self.closePosPid = sp.PID(Kp=1, Ki=0.01, Kd=0, setpoint=0)
 
         #Error Margins
         #TODO: Obtener bien margenes de error
-        self.TOUCH_MARGIN = 10
-        self.POS_MARGIN = 25
+        self.TOUCH_MARGIN = 135
+        self.POS_MARGIN = 180
         self.THETA_MARGIN = 5
-        self.FAR_POS_THRESHOLD = 50
+        self.FAR_POS_THRESHOLD = 200
         self.FAR_ANGLE_THRESHOLD = 20
     
     def update(self, new_positions:list[tuple])->None:
@@ -185,7 +185,9 @@ class Robot:
                 speeds = self.get_pos_powers(dist)
 
             self.send_speeds(*speeds)
-            time.sleep(0.01)
+        
+        self.send_speeds(0, 0)
+        time.sleep(0.5)
 
 
 
