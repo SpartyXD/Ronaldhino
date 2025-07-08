@@ -85,6 +85,8 @@ LEFT, RIGHT = 0, 1
 BALL_POS = (0, 0)
 LEFT_COURT_POS = (0, 0)
 RIGHT_COURT_POS = (0, 0)
+LEFT_QUARTER_POS = (0, 0)
+RIGHT_QUARTER_POS = (0, 0)
 CENTER_POS = (0, 0)
 OBJECTIVE_POS = (0, 0)
 
@@ -94,7 +96,7 @@ class Robot:
         #Stats
         self.positions = [(0, 0), (0, 0)]
         self.angle = 0.0
-        self.target_vector = (0, 0)
+        self.to_target_vector = (0, 0)
         self.circles_vector = (0, 0)
 
         #PIDs
@@ -116,11 +118,10 @@ class Robot:
     def update(self, new_positions:list[tuple])->None:
         '''Actualizar robot'''
         global OBJECTIVE_POS
-        with data_lock:
-            self.positions = new_positions
-            self.circles_vector = get_vector(self.positions[BACK], self.positions[FRONT])
-            self.to_target_vector = get_vector(self.positions[BACK], OBJECTIVE_POS)
-            self.angle = get_angle(self.to_target_vector, self.circles_vector)
+        self.positions = new_positions
+        self.circles_vector = get_vector(self.positions[BACK], self.positions[FRONT])
+        self.to_target_vector = get_vector(self.positions[BACK], OBJECTIVE_POS)
+        self.angle = get_angle(self.to_target_vector, self.circles_vector)
     
     def send_speeds(self, left, rigth)->None:
         command = f"V{left} {rigth}"
@@ -134,7 +135,7 @@ class Robot:
             power = self.closeAnglePid(angle)
         else:
             power = self.farAnglePid(angle)
-        return [-power, power]
+        return [power, -power]
 
 
     def get_pos_powers(self, dist:int)->list:
@@ -155,6 +156,7 @@ class Robot:
             with data_lock:
                 self.send_speeds(*self.get_theta_powers(angle))
                 angle = self.angle
+            time.sleep(0.01)
 
 
     def go_to(self, touch:bool=True)->None:
@@ -183,6 +185,7 @@ class Robot:
                 speeds = self.get_pos_powers(dist)
 
             self.send_speeds(*speeds)
+            time.sleep(0.01)
 
 
 
@@ -223,7 +226,7 @@ LOW_ORANGE = np.array([5, 100, 70])
 HIGH_ORANGE = np.array([15, 255, 255])
 
 # Colores de las cosas
-robot_colors = [[LOW_LIGHT_BLUE, HIGH_LIGHT_BLUE], [LOW_RED, HIGH_RED]]
+robot_colors = [[LOW_LIGHT_BLUE, HIGH_LIGHT_BLUE], [LOW_PINK, HIGH_PINK]]
 ball_colors = [LOW_YELLOW, HIGH_YELLOW]
 left_court_colors = [LOW_BLUE, HIGH_BLUE]
 right_court_colors = [LOW_PINK, HIGH_PINK]
@@ -298,9 +301,10 @@ def get_object_box(img, low, high, rounded:bool=False, name:str="", color:tuple=
 
 def update_all(img):
     '''Actualizar todo segun detecciones'''
-    global CENTER_POS, LEFT_COURT_POS, RIGHT_COURT_POS
+    global CENTER_POS, LEFT_COURT_POS, RIGHT_COURT_POS, LEFT_QUARTER_POS, RIGHT_QUARTER_POS
     global SCREEN_HEIGHT, SCREEN_WIDTH
     global BALL_POS, OBJECTIVE_POS
+
 
     #Obtener objetos
     ball = get_object_box(img, *ball_colors, rounded=True, name="Pelota")
@@ -311,9 +315,15 @@ def update_all(img):
 
     # Actualizar posiciones globales
     with data_lock:
-        SCREEN_WIDTH = int(img.shape[0])
-        SCREEN_HEIGHT = int(img.shape[1])
+        #Para calculos
+        SCREEN_WIDTH = int(img.shape[1])
+        SCREEN_HEIGHT = int(img.shape[0])
         CENTER_POS = (SCREEN_WIDTH//2, SCREEN_HEIGHT//2)
+
+        LEFT_COURT_POS = (SCREEN_WIDTH//7, SCREEN_HEIGHT//2)
+        RIGHT_COURT_POS = ((SCREEN_WIDTH//7)*6, SCREEN_HEIGHT//2)
+        LEFT_QUARTER_POS = (SCREEN_WIDTH//4, SCREEN_HEIGHT//2)
+        RIGHT_QUARTER_POS = ((SCREEN_WIDTH//4)*3, SCREEN_HEIGHT//2)
 
         if robot_back and robot_front:
             ronaldinho.update([robot_back, robot_front])
@@ -323,10 +333,6 @@ def update_all(img):
             if not executing_order:
                 OBJECTIVE_POS = ball
 
-        # LEFT_COURT_POS = left_court
-        # RIGHT_COURT_POS = right_court
-    
-    
     #Dibujar
     with data_lock:
         cv2.line(img, ronaldinho.positions[BACK], OBJECTIVE_POS, BLACK, 2)
@@ -352,35 +358,68 @@ def update_all(img):
 def align_to_ball():
     '''El robot debe girar hasta que su frente apunte directamente al balón, minimizando el ángulo de orientación'''
     update_target(BALL_POS)
-    ronaldinho.align(BALL_POS)
+    ronaldinho.align()
 
 
 def go_to_center():
     '''El robot debe moverse hasta el centro de la pista, indicado por una línea transversal negra.'''
     update_target(CENTER_POS)
-    ronaldinho.go_to(OBJECTIVE_POS)
+    ronaldinho.go_to()
 
 
 def chase_ball():
     '''El robot debe acercarse al balón sin tocarlo.'''
     update_target(BALL_POS)
-    ronaldinho.go_to(BALL_POS, touch=False)
+    ronaldinho.go_to(touch=False)
     
 
-#TODO: straight_push()
 def straight_push():
     '''Desde una orientación inicial adecuada, el robot debe empujar el balón en línea recta hasta el final de la
 cancha.'''
-    pass
+    global LEFT_COURT_POS, RIGHT_COURT_POS
+    global LEFT_QUARTER_POS, RIGHT_QUARTER_POS
+
+    with data_lock:
+        left_court, right_court = LEFT_COURT_POS, RIGHT_COURT_POS
+        left_quarter, right_quarter = LEFT_QUARTER_POS, RIGHT_QUARTER_POS
+
+    chase_ball()
+    if(TEAM_SIDE == LEFT):
+        update_target(right_court)
+    else:
+        update_target(left_court)
+    ronaldinho.go_to()       
 
 
-#TODO: push_to_enemy()
 def push_to_enemy():
     '''Desde posiciones aleatorias asignadas por el cuerpo docente, el robot debe localizar el balón y empujarlo
 hacia el arco enemigo.'''
-    pass
+    global LEFT_COURT_POS, RIGHT_COURT_POS
+    global LEFT_QUARTER_POS, RIGHT_QUARTER_POS
 
-#TODO: kick_to_enemy()
+    with data_lock:
+        left_court, right_court = LEFT_COURT_POS, RIGHT_COURT_POS
+        left_quarter, right_quarter = LEFT_QUARTER_POS, RIGHT_QUARTER_POS
+        pos = ronaldinho.circles_vector
+    
+    if(TEAM_SIDE == LEFT):
+        update_target(left_quarter)
+    else:
+        update_target(right_quarter)
+    
+    ronaldinho.go_to()
+    update_target(BALL_POS)
+    ronaldinho.align()
+
+    if(TEAM_SIDE == LEFT):
+        update_target(right_court)
+    else:
+        update_target(left_court)
+    ronaldinho.go_to()
+
+
+    
+
 def kick_to_enemy():
     '''Similar al caso anterior, pero ahora el robot debe golpear el balón (en lugar de empujarlo) hasta que llegue
 al arco enemigo.'''
@@ -436,18 +475,23 @@ def handle_input():
 if __name__ == "__main__":
     #Obtener equipo
     print("Ronaldhino activado :D")
-    side = input("(I / L) Donde esta el arco enemigo?: ")
+
+    #Abrir todo
+    cv2.namedWindow('original', cv2.WINDOW_NORMAL)
+    cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
+    # cap = cv2.VideoCapture("PerceptionDataset.mp4")
+
+    if not cap.isOpened():
+        print("No se pudo abrir la cámara :(")
+        exit()
+
+    side = input("(I / D) Donde esta el arco enemigo?: ")
     TEAM_SIDE = LEFT if side.upper() == "I" else RIGHT
 
     if TEAM_SIDE == LEFT:
         print("Somos el equipo izquierdo (Azul)!")
     else:
         print("Somos el equipo derecho (Morado)!")
-
-    #Abrir todo
-    cv2.namedWindow('original', cv2.WINDOW_NORMAL)
-    cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
-    # cap = cv2.VideoCapture("PerceptionDataset.mp4")
 
     t1 = Thread(target=handle_input, daemon=True)
     t1.start()
