@@ -108,9 +108,8 @@ class Robot:
         self.closePosPid = sp.PID(Kp=1, Ki=0.01, Kd=0, setpoint=0)
 
         #Error Margins
-        #TODO: Obtener bien margenes de error
         self.TOUCH_MARGIN = 135
-        self.POS_MARGIN = 180
+        self.POS_MARGIN = 150
         self.THETA_MARGIN = 5
         self.FAR_POS_THRESHOLD = 200
         self.FAR_ANGLE_THRESHOLD = 20
@@ -341,6 +340,12 @@ def update_all(img):
         cv2.arrowedLine(img, ronaldinho.positions[BACK], ronaldinho.positions[FRONT], BLACK, 2, tipLength=0.1)
         cv2.circle(img, BALL_POS, 2, (0, 0, 0), -1)
 
+        cv2.circle(img, CENTER_POS, 4, WHITE, -1)
+        cv2.circle(img, LEFT_COURT_POS, 4, WHITE, -1)
+        cv2.circle(img, LEFT_QUARTER_POS, 4, WHITE, -1)
+        cv2.circle(img, RIGHT_COURT_POS, 4, WHITE, -1)
+        cv2.circle(img, RIGHT_QUARTER_POS, 4, WHITE, -1)
+
         #Obtener vectores clave
         vec1 = ronaldinho.to_target_vector
         vec2 = ronaldinho.circles_vector
@@ -383,14 +388,11 @@ cancha.'''
 
     with data_lock:
         left_court, right_court = LEFT_COURT_POS, RIGHT_COURT_POS
-        left_quarter, right_quarter = LEFT_QUARTER_POS, RIGHT_QUARTER_POS
 
     chase_ball()
-    if(TEAM_SIDE == LEFT):
-        update_target(right_court)
-    else:
-        update_target(left_court)
-    ronaldinho.go_to()       
+    ronaldinho.send_speeds(90, 90)
+    time.sleep(3)
+    ronaldinho.send_speeds(0, 0)   
 
 
 def push_to_enemy():
@@ -398,11 +400,10 @@ def push_to_enemy():
 hacia el arco enemigo.'''
     global LEFT_COURT_POS, RIGHT_COURT_POS
     global LEFT_QUARTER_POS, RIGHT_QUARTER_POS
+    print("XD")
 
     with data_lock:
-        left_court, right_court = LEFT_COURT_POS, RIGHT_COURT_POS
         left_quarter, right_quarter = LEFT_QUARTER_POS, RIGHT_QUARTER_POS
-        pos = ronaldinho.circles_vector
     
     if(TEAM_SIDE == LEFT):
         update_target(left_quarter)
@@ -413,19 +414,33 @@ hacia el arco enemigo.'''
     update_target(BALL_POS)
     ronaldinho.align()
 
-    if(TEAM_SIDE == LEFT):
-        update_target(right_court)
-    else:
-        update_target(left_court)
-    ronaldinho.go_to()
+    print("XD")
 
-
+    straight_push()
     
 
 def kick_to_enemy():
     '''Similar al caso anterior, pero ahora el robot debe golpear el balón (en lugar de empujarlo) hasta que llegue
 al arco enemigo.'''
-    pass
+    global LEFT_COURT_POS, RIGHT_COURT_POS
+    global LEFT_QUARTER_POS, RIGHT_QUARTER_POS
+
+    with data_lock:
+        left_court, right_court = LEFT_COURT_POS, RIGHT_COURT_POS
+    push_to_enemy()
+
+    if(TEAM_SIDE == LEFT):
+        update_target(right_court)
+    else:
+        update_target(left_court)
+    ronaldinho.align()
+
+    #Kickeo
+    ronaldinho.send_speeds(120, 120)
+    time.sleep(0.5)
+    ronaldinho.send_speeds(0, 0)
+    
+
 
 #=====================
 
@@ -480,7 +495,7 @@ if __name__ == "__main__":
 
     #Abrir todo
     cv2.namedWindow('original', cv2.WINDOW_NORMAL)
-    cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
+    cap = cv2.VideoCapture(1, cv2.CAP_DSHOW)
     # cap = cv2.VideoCapture("PerceptionDataset.mp4")
 
     if not cap.isOpened():
